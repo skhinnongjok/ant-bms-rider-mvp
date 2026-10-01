@@ -1,4 +1,5 @@
 import { AntBleClient } from "./ble.js";
+import { estimateChargeMinutes } from "./metrics.js";
 import { bytesToHex, parseDeviceInfoFrame, parseStatusFrame } from "./protocol.js";
 
 const $ = (id) => document.getElementById(id);
@@ -7,6 +8,7 @@ const logs = [];
 let latestData = null;
 let connected = false;
 let intentionalDisconnect = false;
+let chargeCurrentSamples = [];
 
 const statusNames = ["ไม่ทราบสถานะ", "พัก", "กำลังชาร์จ", "กำลังคายประจุ", "สแตนด์บาย", "ผิดปกติ"];
 const bluetoothIcon = '<svg viewBox="0 0 24 24"><path d="m7 7 10 10-5 4V3l5 4L7 17"/></svg>';
@@ -18,6 +20,37 @@ function setPill(id, value, active = null) {
   element.className = active === null ? "neutral" : active ? "" : "off";
 }
 
+function formatDuration(minutes) {
+  if (minutes === 0) return "ใกล้เต็มแล้ว";
+  if (minutes < 60) return `ประมาณ ${minutes} นาที`;
+  const hours = Math.floor(minutes / 60); const remainder = minutes % 60;
+  return remainder ? `ประมาณ ${hours} ชม. ${remainder} นาที` : `ประมาณ ${hours} ชม.`;
+}
+
+function renderChargeEta(data, isCharging) {
+  const eta = $("chargeEta");
+  if (!isCharging) {
+    eta.hidden = true; chargeCurrentSamples = []; return;
+  }
+
+  eta.hidden = false;
+  const now = Date.now(); const amps = Math.abs(data.current);
+  if (Number.isFinite(data.current) && data.current <= -0.2) chargeCurrentSamples.push({ time: now, amps });
+  chargeCurrentSamples = chargeCurrentSamples.filter((sample) => sample.time >= now - 60_000);
+  const averageCurrent = chargeCurrentSamples.length
+    ? chargeCurrentSamples.reduce((sum, sample) => sum + sample.amps, 0) / chargeCurrentSamples.length
+    : 0;
+  const minutes = estimateChargeMinutes(data, averageCurrent);
+  if (minutes === null) {
+    $("chargeEtaValue").textContent = "กำลังคำนวณ…";
+    $("chargeEtaClock").textContent = "รอค่ากระแสชาร์จที่เสถียร";
+    return;
+  }
+  $("chargeEtaValue").textContent = formatDuration(minutes);
+  const finishTime = new Date(now + minutes * 60_000).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+  $("chargeEtaClock").textContent = minutes === 0 ? `SOC ${Math.round(data.soc)}%` : `ประมาณ ${finishTime} น. · เฉลี่ย ${averageCurrent.toFixed(1)} A`;
+}
+
 function render(data) {
   latestData = data;
   document.body.classList.remove("data-stale");
@@ -25,6 +58,10 @@ function render(data) {
   $("socRing").style.setProperty("--soc", Math.max(0, Math.min(100, data.soc)));
   $("socLabel").textContent = data.soc >= 60 ? "พร้อมเดินทาง" : data.soc >= 25 ? "ควรวางแผนชาร์จ" : "ควรชาร์จแบตเตอรี่";
   $("batteryStatus").textContent = statusNames[data.statusCode] || statusNames[0];
+  const isCharging = data.statusCode === 2 || data.current < -0.05;
+  $("rideState").classList.toggle("is-charging", isCharging);
+  $("socRing").classList.toggle("is-charging", isCharging);
+  renderChargeEta(data, isCharging);
   $("remainingCapacity").innerHTML = `${format(data.remainingCapacity, 1)} <small>Ah</small>`;
   $("voltageValue").textContent = format(data.voltage, 2);
   $("currentValue").textContent = format(Math.abs(data.current), 1);
@@ -167,6 +204,7 @@ client.addEventListener("connection", ({ detail }) => {
   $("pollButton").disabled = !connected;
   $("dataAge").textContent = connected ? "SYNC" : "OFFLINE"; $("dataAge").classList.toggle("live", connected);
   if (!connected) document.body.classList.add("data-stale");
+  if (!connected) { chargeCurrentSamples = []; $("chargeEta").hidden = true; }
   addLog(connected ? `CONNECTED ${detail.name}` : `DISCONNECTED ${detail.name}`);
   if (!connected && !intentionalDisconnect) showToast("Bluetooth ถูกตัดการเชื่อมต่อ", true);
   else if (connected) showToast(`เชื่อมต่อ ${detail.name} แล้ว`);

@@ -26,18 +26,19 @@
         <article class="battery-hero">
           <div class="hero-topline"><div><span class="section-kicker">BATTERY STATUS</span><h1>ภาพรวมแบตเตอรี่</h1></div><span class="live-badge" id="dataAge">OFFLINE</span></div>
           <div class="hero-content">
-            <div class="soc-gauge" id="socRing" style="--soc:0"><div class="soc-gauge-inner"><strong id="socValue">—</strong><span>%</span><small id="socLabel">รอข้อมูล</small></div></div>
+            <div class="soc-gauge" id="socRing" style="--soc:0"><div class="soc-gauge-inner"><svg class="charge-bolt" viewBox="0 0 24 24" aria-hidden="true"><path d="M13.2 2 5.8 13.1h5.3L9.9 22l8.3-12.2h-5.5L13.2 2Z"/></svg><strong id="socValue">—</strong><span>%</span><small id="socLabel">รอข้อมูล</small></div></div>
             <div class="hero-summary">
-              <div class="ride-state"><span class="pulse-dot"></span><span id="batteryStatus">เชื่อมต่อ BMS เพื่อเริ่มอ่านข้อมูล</span></div>
+              <div class="ride-state" id="rideState"><span class="pulse-dot"></span><span id="batteryStatus">เชื่อมต่อ BMS เพื่อเริ่มอ่านข้อมูล</span></div>
               <div class="capacity-value"><span>ความจุคงเหลือ</span><strong id="remainingCapacity">— <small>Ah</small></strong></div>
               <button class="hero-connect" id="connectButton"><svg viewBox="0 0 24 24"><path d="m7 7 10 10-5 4V3l5 4L7 17"/></svg><span>เลือกอุปกรณ์</span></button>
             </div>
           </div>
+          <div class="charge-eta" id="chargeEta" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v5l3 2M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9Z"/></svg><div><span>คาดว่าจะชาร์จเต็ม</span><strong id="chargeEtaValue">กำลังคำนวณ…</strong><small id="chargeEtaClock"></small></div></div>
           <div class="hero-glow"></div>
         </article>
 
         <aside class="device-card">
-          <div class="device-visual"><div class="battery-pack"><i></i><i></i><i></i><i></i><i></i></div><span class="signal-ring ring-one"></span><span class="signal-ring ring-two"></span></div>
+          <div class="device-visual"><img class="motorcycle-art" src="https://static.vecteezy.com/system/resources/previews/035/174/213/non_2x/electric-motorcycle-technology-object-illustration-free-png.png" alt="รถมอเตอร์ไซค์ไฟฟ้า" /><span class="signal-ring ring-one"></span><span class="signal-ring ring-two"></span></div>
           <div class="device-copy"><span class="section-kicker">CONNECTED DEVICE</span><h2 id="deviceName">ยังไม่ได้เลือก BMS</h2><p id="versionText">ข้อมูลรุ่นจะแสดงหลังเชื่อมต่อ</p></div>
         </aside>
       </section>

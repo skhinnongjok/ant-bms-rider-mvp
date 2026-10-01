@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { AntFrameAssembler, STATUS_REQUEST, crc16Modbus, decodeBitMask, parseStatusFrame, validateFrame } from "../src/protocol.js";
+import { estimateChargeMinutes } from "../src/metrics.js";
 
 function writeU16(bytes, offset, value) { new DataView(bytes.buffer).setUint16(offset, value, true); }
 function writeI16(bytes, offset, value) { new DataView(bytes.buffer).setInt16(offset, value, true); }
@@ -31,6 +32,16 @@ test("known status request has valid Modbus CRC", () => {
   assert.deepEqual([...STATUS_REQUEST.slice(6, 8)], [0x18, 0x55]);
 });
 
+test("estimates charge time from BMS capacity and current", () => {
+  assert.equal(estimateChargeMinutes({ totalCapacity: 24, remainingCapacity: 20.2, soc: 85 }, 8.2), 28);
+  assert.equal(estimateChargeMinutes({ totalCapacity: 24, remainingCapacity: 24, soc: 100 }, 8.2), 0);
+  assert.equal(estimateChargeMinutes({ totalCapacity: 24, remainingCapacity: 20.2, soc: 85 }, 0), null);
+});
+
+test("infers total capacity from SOC when BMS total is unavailable", () => {
+  assert.equal(estimateChargeMinutes({ remainingCapacity: 20.4, soc: 85 }, 8), 27);
+});
+
 test("parses a 20S dynamic status payload", () => {
   const parsed = parseStatusFrame(buildStatusFrame());
   assert.equal(parsed.cellCount, 20); assert.equal(parsed.cells[0], 3.6); assert.equal(parsed.cells[19], 3.619);
@@ -42,6 +53,30 @@ test("reassembles fragmented BLE notifications", () => {
   const frame = buildStatusFrame(); const assembler = new AntFrameAssembler();
   assert.deepEqual(assembler.push(frame.slice(0, 20)), []); assert.deepEqual(assembler.push(frame.slice(20, 88)), []);
   const result = assembler.push(frame.slice(88)); assert.equal(result.length, 1); assert.deepEqual(result[0], frame);
+});
+
+test("resynchronizes after an incomplete frame runs into the next response", () => {
+  const frame = buildStatusFrame();
+  const incomplete = new Uint8Array(frame.length - 20);
+  incomplete.set(frame.slice(0, 60)); incomplete.set(frame.slice(80), 60);
+  const combined = new Uint8Array(incomplete.length + frame.length);
+  combined.set(incomplete); combined.set(frame, incomplete.length);
+  const assembler = new AntFrameAssembler();
+  const result = assembler.push(combined);
+  assert.equal(assembler.lastDiscarded, 1);
+  assert.equal(result.length, 1);
+  assert.deepEqual(result[0], frame);
+});
+
+test("does not emit a CRC-corrupted frame", () => {
+  const corrupted = buildStatusFrame(); corrupted[70] ^= 0xff;
+  const valid = buildStatusFrame();
+  const combined = new Uint8Array(corrupted.length + valid.length);
+  combined.set(corrupted); combined.set(valid, corrupted.length);
+  const assembler = new AntFrameAssembler();
+  const result = assembler.push(combined);
+  assert.equal(assembler.lastDiscarded, 1);
+  assert.deepEqual(result, [valid]);
 });
 
 test("rejects corrupted frames", () => {
